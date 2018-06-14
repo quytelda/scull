@@ -92,6 +92,7 @@ static int __init scull_init(void)
 	} else {
 		result = alloc_chrdev_region(&dev, scull_minor, scull_nr_devs,
 					     "scull");
+		scull_major = MAJOR(dev);
 	}
 
 	if(result < 0) {
