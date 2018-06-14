@@ -22,4 +22,8 @@
 #define SCULL_NR_DEVS 4
 #endif
 
+struct scull_dev {
+	struct cdev cdev;
+};
+
 #endif /* _SCULL_H_ */
