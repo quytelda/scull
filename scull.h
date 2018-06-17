@@ -26,9 +26,34 @@
 #define SCULL_NR_DEVS 4
 #endif
 
+/*
+ * The bare device is a variable-length region of memory.
+ * Use a linked list of indirect blocks.
+ *
+ * "scull_dev->data" points to an array of pointers, each
+ * pointer refers to a memory area of SCULL_QUANTUM bytes.
+ *
+ * The array (quantum-set) is SCULL_QSET long.
+ */
+ #ifndef SCULL_QUANTUM
+ #define SCULL_QUANTUM 4000
+ #endif
+
+ #ifndef SCULL_QSET
+ #define SCULL_QSET 1000
+ #endif
+
+struct scull_qset {
+	void **data;
+	struct scull_qset *next;
+};
+
 struct scull_dev {
-	size_t size;
-	struct cdev cdev;
+	struct scull_qset *data; /* pointer to first quantum set */
+	size_t quantum;          /* the current quantum size */
+	size_t qset;             /* the current array size */
+	size_t size;             /* amount of data stored here */
+	struct cdev cdev;        /* char device structure */
 };
 
 #endif /* _SCULL_H_ */

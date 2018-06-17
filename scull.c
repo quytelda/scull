@@ -25,6 +25,8 @@
 static int scull_major = SCULL_MAJOR;
 static int scull_minor = 0;
 static int scull_nr_devs = SCULL_NR_DEVS;
+static int scull_quantum = SCULL_QUANTUM;
+static int scull_qset    = SCULL_QSET;
 
 module_param(scull_major, int, 0644);
 module_param(scull_minor, int, 0644);
@@ -36,7 +38,28 @@ struct scull_dev *scull_devices; /* Allocated in scull_init_module(). */
 
 static int scull_trim(struct scull_dev *dev)
 {
-	dev->size = 0;
+	int i;
+	size_t qset = dev->qset;
+
+	struct scull_qset *dptr;
+	struct scull_qset *next;
+
+	for(dptr = dev->data; dptr; dptr = next) { /* all the list items */
+		if(dptr->data) {
+			for(i = 0; i < qset; i++)
+				kfree(dptr->data[i]);
+			kfree(dptr->data);
+			dptr->data = NULL;
+		}
+
+		next = dptr->next;
+		kfree(dptr);
+	}
+
+	dev->size    = 0;
+	dev->quantum = scull_quantum;
+	dev->qset    = scull_qset;
+	dev->data    = NULL;
 
 	return 0;
 }
@@ -90,8 +113,10 @@ static void scull_cleanup_module(void)
 
 	/* Get rid of our char dev entries. */
 	if(scull_devices) {
-		for(i = 0; i < scull_nr_devs; i++)
+		for(i = 0; i < scull_nr_devs; i++) {
+			scull_trim(&scull_devices[i]);
 			cdev_del(&scull_devices[i].cdev);
+		}
 
 		kfree(scull_devices);
 	}
@@ -127,7 +152,7 @@ static int __init scull_init_module(void)
 		return result;
 	}
 
-	/* 
+	/*
 	 * Allocate the devices -- we can't have them static, as the number
 	 * can be specified at load time
 	 */
