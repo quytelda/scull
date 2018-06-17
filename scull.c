@@ -125,7 +125,6 @@ static void scull_cleanup_module(void)
 	unregister_chrdev_region(devno, scull_nr_devs);
 }
 
-
 static int __init scull_init_module(void)
 {
 	dev_t dev = 0;
