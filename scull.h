@@ -1,4 +1,4 @@
-/*
+/* SPDX-License-Identifier: GPL-2.0 AND BSD-Source-Code
  * scull.h -- definitions for the char module
  *
  * Copyright (C) 2001 Alessandro Rubini and Jonathan Corbet
@@ -12,7 +12,6 @@
  * by O'Reilly & Associates.   No warranty is attached;
  * we cannot take responsibility for errors or fitness for use.
  *
- * $Id: scull.h,v 1.15 2004/11/04 17:51:18 rubini Exp $
  */
 
 #ifndef _SCULL_H_
