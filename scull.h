@@ -23,6 +23,7 @@
 #endif
 
 struct scull_dev {
+	size_t size;
 	struct cdev cdev;
 };
 

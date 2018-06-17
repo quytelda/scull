@@ -34,6 +34,33 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 struct scull_dev *scull_devices; /* Allocated in scull_init_module(). */
 
+static int scull_trim(struct scull_dev *dev)
+{
+	dev->size = 0;
+
+	return 0;
+}
+
+int open(struct inode *inode, struct file *filp)
+{
+	struct scull_dev *dev; /* device information */
+
+	dev = container_of(inode->i_cdev, struct scull_dev, cdev);
+	filp->private_data = dev; /* for other methods */
+
+	/* Now trim to 0 the length of the device if open was write-only. */
+	if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
+		scull_trim(dev); /* Ignore errors. */
+	}
+
+	return 0; /* Success. */
+}
+
+int scull_release(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
 static struct file_operations scull_fops = {
 	.owner = THIS_MODULE,
 };
