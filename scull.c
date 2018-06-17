@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 
 #include "scull.h"
 
@@ -64,7 +65,33 @@ static int scull_trim(struct scull_dev *dev)
 	return 0;
 }
 
-int open(struct inode *inode, struct file *filp)
+struct scull_qset *scull_follow(struct scull_dev *dev, int n)
+{
+	struct scull_qset *qs = dev->data;
+
+	/* Allocate first qset explicitly if need be. */
+	if (!qs) {
+		qs = dev->data = kzalloc(sizeof(*qs), GFP_KERNEL);
+		if (!qs)
+			return NULL; /* never mind */
+	}
+
+	/* Then follow the list. */
+	while (n--) {
+		if (!qs->next) {
+			qs->next = kzalloc(sizeof(*qs), GFP_KERNEL);
+				if (!qs->next)
+					return NULL; /* never mind */
+		}
+
+		qs = qs->next;
+		continue;
+	}
+
+	return qs;
+}
+
+int scull_open(struct inode *inode, struct file *filp)
 {
 	struct scull_dev *dev; /* device information */
 
@@ -84,8 +111,115 @@ int scull_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+ssize_t scull_read(struct file *filp, char __user *buf, size_t count,
+		   loff_t *f_pos)
+{
+	struct scull_dev *dev = filp->private_data;
+	struct scull_qset *dptr;
+
+	int item;
+	size_t quantum  = dev->quantum;
+	size_t qset     = dev->qset;
+	size_t itemsize = quantum * qset;
+	size_t s_pos;
+	size_t q_pos;
+	ssize_t retval  = 0;
+	int rest;
+
+	if (*f_pos >= dev->size)
+		goto out;
+	if (*f_pos + count > dev->size)
+		count = dev->size - *f_pos;
+
+	/* Find list item, qset index, and offset in the quantum. */
+	item  = *f_pos / itemsize;
+	rest  = *f_pos % itemsize;
+	s_pos = rest / quantum;
+	q_pos = rest % quantum;
+
+	/* Follow the list up to the right position. */
+	dptr = scull_follow(dev, item);
+
+	if (!dptr || !dptr->data || !dptr->data[s_pos])
+		goto out; /* Don't fill holes. */
+
+	/* Read only up to the end of the quantum. */
+	if (count > quantum - q_pos)
+		count = quantum - q_pos;
+
+	if (copy_to_user(buf, dptr->data[s_pos] + q_pos, count)) {
+		retval = -EFAULT;
+		goto out;
+	}
+
+	*f_pos += count;
+	retval = count;
+
+out:
+	return retval;
+}
+
+ssize_t scull_write(struct file *filp, const char __user *buf, size_t count,
+		    loff_t *f_pos)
+{
+	struct scull_dev *dev = filp->private_data;
+	struct scull_qset *dptr;
+
+	int item;
+	size_t quantum  = dev->quantum;
+	size_t qset     = dev->qset;
+	size_t itemsize = quantum * qset;
+	size_t s_pos;
+	size_t q_pos;
+	size_t rest;
+	ssize_t retval  = -ENOMEM; /* value used in "goto out" statements */
+
+	/* Find list item, qset index, and offset in the quantum. */
+	item  = *f_pos / itemsize;
+	rest  = *f_pos % itemsize;
+	s_pos = rest / quantum;
+	q_pos = rest % quantum;
+
+	/* Follow the list up to the right position. */
+	dptr = scull_follow(dev, item);
+	if (!dptr)
+		goto out;
+	if (!dptr->data) {
+		dptr->data = kcalloc(qset, sizeof(char *), GFP_KERNEL);
+		if (!dptr->data)
+			goto out;
+	}
+	if (!dptr->data[s_pos]) {
+		dptr->data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+		if (!dptr->data[s_pos])
+			goto out;
+	}
+
+	/* Write only up to the end of this quantum. */
+	if (count > quantum - q_pos)
+		count = quantum - q_pos;
+
+	if (copy_from_user(dptr->data[s_pos] + q_pos, buf, count)) {
+		retval = -EFAULT;
+		goto out;
+	}
+	*f_pos += count;
+	retval = count;
+
+	/* Update the size. */
+	if (dev->size < *f_pos)
+		dev->size = *f_pos;
+
+out:
+	return retval;
+}
+
 static struct file_operations scull_fops = {
-	.owner = THIS_MODULE,
+	.owner   = THIS_MODULE,
+	.read    = scull_read,
+	.write   = scull_write,
+	.open    = scull_open,
+	.release = scull_release,
 };
 
 static void scull_setup_cdev(struct scull_dev *dev, int index)
