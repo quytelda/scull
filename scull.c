@@ -22,7 +22,7 @@
 
 #include "scull.h"
 
-static int scull_major = 0;
+static int scull_major = SCULL_MAJOR;
 static int scull_minor = 0;
 static int scull_nr_devs = SCULL_NR_DEVS;
 
